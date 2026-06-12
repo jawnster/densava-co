@@ -1,0 +1,20 @@
+# densava.co
+
+The marketing landing for densava, Inc. Single-page static site.
+
+## Stack
+
+- Plain HTML + CSS, no build step
+- Google Fonts (DM Serif Display, DM Sans, Outfit) via CDN
+- Vercel static hosting
+
+## Deploy
+
+Pushes to `main` auto-deploy via Vercel.
+
+Local preview:
+
+```sh
+python3 -m http.server 8000
+# then open http://localhost:8000
+```
