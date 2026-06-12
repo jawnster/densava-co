@@ -57,6 +57,16 @@
     text-align: center;
   }
 
+  /* on phones, drop the wordmark closer to the top edge instead of
+     vertically centering — center-justified looks like wasted whitespace
+     above the fold on a tall portrait viewport. */
+  @media (max-width: 640px) {
+    main {
+      padding: 40px 20px 32px;
+      justify-content: flex-start;
+    }
+  }
+
   /* visually hide content for sighted users but keep it for screen readers */
   .visually-hidden {
     position: absolute;
