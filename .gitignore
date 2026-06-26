@@ -2,3 +2,7 @@
 .vercel
 node_modules
 *.log
+.env*
+
+# scratch downloads / handoff zips at the repo root — local-only
+*.zip
