@@ -418,7 +418,15 @@
 
       var payload = {
         email: emailInput.value.trim(),
-        source: 'densava.co',
+        // derive attribution from the host we're actually served on. both
+        // densava.com and densava.co serve this same page, so a hardcoded
+        // value would mis-attribute. strip www, allowlist the two canonical
+        // hosts, and fall through to '.co' for anything else (previews,
+        // localhost) — matching ALLOWED_SOURCES in api/beta-signup.ts.
+        source: (function () {
+          var h = window.location.hostname.replace(/^www\./, '');
+          return h === 'densava.com' ? 'densava.com' : 'densava.co';
+        })(),
         website: form.elements['website'].value, // honeypot
       };
 
