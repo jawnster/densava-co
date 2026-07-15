@@ -2,7 +2,7 @@
   "name": "densava-co",
   "version": "0.1.0",
   "private": true,
-  "description": "densava.co — marketing landing for densava, Inc.",
+  "description": "densava.com — marketing landing for densava, Inc.",
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4"
   }
