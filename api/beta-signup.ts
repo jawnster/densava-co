@@ -5,6 +5,15 @@
 //   when present we silently return ok so we don't tip them off.
 // the table lives in the shared densava prod neon db; first-touch attribution
 // is enforced by a unique constraint on (email).
+//
+// notification: on a genuinely NEW signup (INSERT ... RETURNING id yields a
+// row — duplicates are a no-op via ON CONFLICT), we fire a Resend email so
+// Dave sees signups in real time without polling the db. it's fail-open —
+// any Resend error is caught and logged, never surfaced to the client, since
+// the db write has already succeeded. requires two env vars:
+//   - RESEND_API_KEY: Dave's Resend API key
+//   - WAITLIST_NOTIFY_EMAIL: the inbox that receives the notification
+// missing either one = silent skip (warn logged, no notification, no error).
 
 import { neon } from '@neondatabase/serverless'
 
@@ -70,17 +79,59 @@ export default async function handler(req: Request): Promise<Response> {
   const ipHash = await hashIp(ip, ipSalt)
   const userAgent = req.headers.get('user-agent') ?? null
 
+  const email = body.email.trim().toLowerCase()
+  const source = body.source
+
   // insert. first-touch attribution: duplicates are a no-op via ON CONFLICT.
+  // RETURNING id lets us distinguish a genuinely new row from a duplicate:
+  // ON CONFLICT DO NOTHING returns zero rows when the email already exists.
+  let inserted = false
   try {
     const sql = neon(dbUrl)
-    await sql`
+    const rows = await sql`
       INSERT INTO beta_signups (email, source, ip_hash, user_agent)
-      VALUES (${body.email.trim().toLowerCase()}, ${body.source}, ${ipHash}, ${userAgent})
+      VALUES (${email}, ${source}, ${ipHash}, ${userAgent})
       ON CONFLICT (email) DO NOTHING
+      RETURNING id
     `
+    inserted = Array.isArray(rows) && rows.length > 0
   } catch (err) {
     console.error('beta-signup insert failed', err)
     return json({ error: 'Something went wrong. Please try again.' }, 500)
+  }
+
+  // notify Dave via Resend on a NEW signup only. the `inserted` guard means a
+  // duplicate email (ON CONFLICT no-op) never fires — combined with the unique
+  // constraint on email, each address triggers at most one notification, so no
+  // separate rate limiting is needed. fail-open: the db write already
+  // succeeded, so any Resend error is logged and swallowed, never returned to
+  // the client (which always gets { ok: true } below).
+  if (inserted) {
+    const resendKey = process.env.RESEND_API_KEY
+    const notifyEmail = process.env.WAITLIST_NOTIFY_EMAIL
+    if (resendKey && notifyEmail) {
+      try {
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'authorization': `Bearer ${resendKey}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            // placeholder sender: onboarding@resend.dev works without a verified
+            // domain. swap for a verified densava.com sender once configured.
+            from: 'densava beta <onboarding@resend.dev>',
+            to: [notifyEmail],
+            subject: `New beta signup: ${email}`,
+            text: `New beta signup landed.\n\nEmail: ${email}\nSource: ${source}\nWhen: ${new Date().toISOString()}\n`,
+          }),
+        })
+      } catch (err) {
+        console.error('resend notify failed (non-blocking)', err)
+      }
+    } else {
+      console.warn('resend notify skipped: RESEND_API_KEY or WAITLIST_NOTIFY_EMAIL not set')
+    }
   }
 
   return json({ ok: true })
