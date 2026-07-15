@@ -2,6 +2,16 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        { "type": "host", "value": "densava.co" }
+      ],
+      "destination": "https://densava.com/$1",
+      "statusCode": 308
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
