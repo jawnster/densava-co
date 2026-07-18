@@ -120,13 +120,10 @@ export default async function handler(req: Request): Promise<Response> {
             'content-type': 'application/json',
           },
           body: JSON.stringify({
-            // placeholder sender. NOTE: the shared onboarding@resend.dev sender
-            // only delivers to the address that owns the Resend account — any
-            // other recipient is rejected 403 "You can only send testing emails
-            // to your own email address". So WAITLIST_NOTIFY_EMAIL must be that
-            // same address until a densava.com domain is verified on Resend and
-            // this from-address is swapped for a sender on it.
-            from: 'densava beta <onboarding@resend.dev>',
+            // waitlist@densava.com sits on the densava.com domain, which is
+            // verified on Resend — so this can deliver to any recipient, not
+            // just the address that owns the Resend account.
+            from: 'densava beta <waitlist@densava.com>',
             to: [notifyEmail],
             subject: `New beta signup: ${email}`,
             text: `New beta signup landed.\n\nEmail: ${email}\nSource: ${source}\nWhen: ${new Date().toISOString()}\n`,
