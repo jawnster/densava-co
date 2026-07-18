@@ -13,7 +13,9 @@
 // the db write has already succeeded. requires two env vars:
 //   - RESEND_API_KEY: Dave's Resend API key
 //   - WAITLIST_NOTIFY_EMAIL: the inbox that receives the notification
-// missing either one = silent skip (warn logged, no notification, no error).
+// missing either one = skip, naming the absent var in a warn. a non-2xx from
+// Resend is logged with its status and body — neither case is silent, and
+// neither is ever surfaced to the client.
 
 import { neon } from '@neondatabase/serverless'
 
@@ -111,26 +113,43 @@ export default async function handler(req: Request): Promise<Response> {
     const notifyEmail = process.env.WAITLIST_NOTIFY_EMAIL
     if (resendKey && notifyEmail) {
       try {
-        await fetch('https://api.resend.com/emails', {
+        const res = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
             'authorization': `Bearer ${resendKey}`,
             'content-type': 'application/json',
           },
           body: JSON.stringify({
-            // placeholder sender: onboarding@resend.dev works without a verified
-            // domain. swap for a verified densava.com sender once configured.
+            // placeholder sender. NOTE: the shared onboarding@resend.dev sender
+            // only delivers to the address that owns the Resend account — any
+            // other recipient is rejected 403 "You can only send testing emails
+            // to your own email address". So WAITLIST_NOTIFY_EMAIL must be that
+            // same address until a densava.com domain is verified on Resend and
+            // this from-address is swapped for a sender on it.
             from: 'densava beta <onboarding@resend.dev>',
             to: [notifyEmail],
             subject: `New beta signup: ${email}`,
             text: `New beta signup landed.\n\nEmail: ${email}\nSource: ${source}\nWhen: ${new Date().toISOString()}\n`,
           }),
         })
+        // fetch only rejects on network failure — a 401/403/422 from Resend
+        // resolves normally. without this check a rejected send is entirely
+        // silent, which is exactly how the notify path went missing before.
+        if (!res.ok) {
+          const detail = await res.text().catch(() => '<unreadable body>')
+          console.error(`resend notify rejected: HTTP ${res.status} ${detail}`)
+        }
       } catch (err) {
         console.error('resend notify failed (non-blocking)', err)
       }
     } else {
-      console.warn('resend notify skipped: RESEND_API_KEY or WAITLIST_NOTIFY_EMAIL not set')
+      // name the missing var — "one of these two" sent the last debug pass
+      // looking in the wrong place.
+      const missing = [
+        !resendKey && 'RESEND_API_KEY',
+        !notifyEmail && 'WAITLIST_NOTIFY_EMAIL',
+      ].filter(Boolean).join(', ')
+      console.warn(`resend notify skipped: ${missing} not set on this deployment`)
     }
   }
 
